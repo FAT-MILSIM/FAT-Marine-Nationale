@@ -109,10 +109,28 @@ autoMode.addEventListener("click", () => setPreview("auto"));
 const STAFF_USER = "FS45";
 const STAFF_PASS = "Marine26";
 const STORAGE_KEY = "marine_ops_applications_v1";
-const STAFF_SESSION_KEY = "marine_ops_staff_session_v1";
+const STAFF_SESSION_KEY = "marine_ops_staff_session_v2";
 const STATUS = ["Nouvelle", "En étude", "Entretien", "Acceptée", "Refusée"];
 let staffLoggedIn = false;
 const $ = (id) => document.getElementById(id);
+function saveStaffSession() {
+  try { localStorage.setItem(STAFF_SESSION_KEY, "connected"); return true; }
+  catch (error) { showNotice("staffNotice", "Le navigateur bloque le stockage local : la connexion ne pourra pas être conservée.", "error"); return false; }
+}
+function clearStaffSession() {
+  try { localStorage.removeItem(STAFF_SESSION_KEY); } catch (error) {}
+}
+function restoreStaffSession() {
+  try { return localStorage.getItem(STAFF_SESSION_KEY) === "connected"; }
+  catch (error) { return false; }
+}
+function showStaffDashboard() {
+  staffLoggedIn = true;
+  $("loginPanel").classList.add("hidden");
+  $("dashboardPanel").classList.remove("hidden");
+  $("loggedInLabel").textContent = "Connecté : " + STAFF_USER;
+  renderDashboard();
+}
 const readApps = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch { return []; } };
 const writeApps = (apps) => localStorage.setItem(STORAGE_KEY, JSON.stringify(apps));
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -131,20 +149,24 @@ $("applicationForm").addEventListener("submit", (event) => {
 });
 $("loginButton").addEventListener("click", () => {
   if($("staffUsername").value===STAFF_USER && $("staffPassword").value===STAFF_PASS) {
-    staffLoggedIn=true;
-    localStorage.setItem(STAFF_SESSION_KEY, "connected");
-    $("loginPanel").classList.add("hidden"); $("dashboardPanel").classList.remove("hidden");
-    $("loggedInLabel").textContent="Connecté : "+STAFF_USER; hideNotice("staffNotice"); renderDashboard();
+    if (saveStaffSession()) {
+      hideNotice("staffNotice");
+      showStaffDashboard();
+    }
   } else showNotice("staffNotice","Identifiant ou mot de passe incorrect.","error");
 });
 $("staffPassword").addEventListener("keydown",e=>{if(e.key==="Enter")$("loginButton").click();});
 $("logoutButton").addEventListener("click",()=>{
-  staffLoggedIn=false;
-  localStorage.removeItem(STAFF_SESSION_KEY);
+  staffLoggedIn = false;
+  clearStaffSession();
   $("dashboardPanel").classList.add("hidden");
   $("loginPanel").classList.remove("hidden");
-  $("staffPassword").value="";
+  $("staffPassword").value = "";
 });
+// Connexion persistante : reste connecté après actualisation ou fermeture/réouverture.
+if (restoreStaffSession()) {
+  showStaffDashboard();
+}
 function renderDashboard() {
   if(!staffLoggedIn)return;
   const apps=readApps();
@@ -155,15 +177,6 @@ function renderDashboard() {
   tbody.querySelectorAll(".statusselect").forEach(el=>el.addEventListener("change",()=>updateApp(Number(el.dataset.id),{status:el.value})));
   tbody.querySelectorAll(".save-note").forEach(el=>el.addEventListener("click",()=>{const id=Number(el.dataset.saveId);const note=tbody.querySelector(`[data-note-id="${id}"]`).value;updateApp(id,{note});showNotice("staffNotice","Note recruteur enregistrée.");}));
   tbody.querySelectorAll(".delete-app").forEach(el=>el.addEventListener("click",()=>{if(!confirm("Supprimer définitivement cette candidature de ce navigateur ?"))return;writeApps(readApps().filter(a=>a.id!==Number(el.dataset.deleteId)));renderDashboard();}));
-}
-// Restaure la connexion recruteur après actualisation ou fermeture/réouverture de la page.
-// La session reste enregistrée dans le navigateur jusqu'à la déconnexion manuelle.
-if (localStorage.getItem(STAFF_SESSION_KEY) === "connected") {
-  staffLoggedIn = true;
-  $("loginPanel").classList.add("hidden");
-  $("dashboardPanel").classList.remove("hidden");
-  $("loggedInLabel").textContent = "Connecté : " + STAFF_USER;
-  renderDashboard();
 }
 function updateApp(id,changes){writeApps(readApps().map(a=>a.id===id?{...a,...changes}:a));renderDashboard();}
 $("exportButton").addEventListener("click",()=>{
